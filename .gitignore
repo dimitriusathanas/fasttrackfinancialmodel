@@ -6,3 +6,6 @@ _uploaded_*
 *_dump.txt
 sanity_check.txt
 .streamlit/secrets.toml
+crm_customers.csv
+crm_tasks.json
+crm_status_snapshot.json

@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import crm_ui
 import kpis
 import market_research
 from data_loader import load_workbook
@@ -152,8 +153,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["KPI Overview", "Trends", "Income Statement", "Balance Sheet", "Market Research"]
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    ["KPI Overview", "Trends", "Income Statement", "Balance Sheet", "Market Research",
+     "Receivables CRM"]
 )
 
 # ---------------------------------------------------------------------------
@@ -266,3 +268,10 @@ with tab5:
         if keywords:
             url = market_research.google_search_url(keywords)
             st.markdown(f"[Open Google search for '{keywords}']({url})")
+
+# ---------------------------------------------------------------------------
+# Tab 6: Receivables CRM
+# ---------------------------------------------------------------------------
+with tab6:
+    st.markdown('<div class="section-title">Receivables CRM</div>', unsafe_allow_html=True)
+    crm_ui.render()
