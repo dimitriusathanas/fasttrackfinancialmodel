@@ -1,6 +1,6 @@
 """Market research tab: ask Claude to web-search current market conditions.
 
-Falls back to a plain Google search link if ANTHROPIC_API_KEY isn't set.
+Falls back to a plain Google search link if no API key is configured.
 """
 from __future__ import annotations
 
@@ -12,8 +12,22 @@ import anthropic
 MODEL = "claude-opus-4-7"
 
 
+def _get_api_key() -> str | None:
+    """Read the API key from the environment, or from Streamlit's secrets manager
+    when running on Streamlit Community Cloud (Settings -> Secrets)."""
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if key:
+        return key
+    try:
+        import streamlit as st
+
+        return st.secrets.get("ANTHROPIC_API_KEY")
+    except Exception:
+        return None
+
+
 def api_key_available() -> bool:
-    return bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return bool(_get_api_key())
 
 
 def google_search_url(keywords: str) -> str:
@@ -27,7 +41,7 @@ def run_market_research(keywords: str, context: str = "") -> str:
     context (e.g. the company's industry) to help Claude target the search.
     Returns the assembled text response, including inline citations where available.
     """
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(api_key=_get_api_key())
 
     prompt = (
         "You are helping a finance team assess current market conditions that could "

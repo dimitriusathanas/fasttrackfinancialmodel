@@ -1,6 +1,8 @@
 """Fast Track financial dashboard — Streamlit entry point."""
 from __future__ import annotations
 
+import os
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -9,9 +11,84 @@ import kpis
 import market_research
 from data_loader import load_workbook
 
-DEFAULT_PATH = r"C:\Users\jimmy\OneDrive\Desktop\Fast Track Supporting Model.xlsx"
+_LOCAL_DEFAULT = r"C:\Users\jimmy\OneDrive\Desktop\Fast Track Supporting Model.xlsx"
+_BUNDLED_DEFAULT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "Fast Track Supporting Model.xlsx"
+)
+
+
+def _resolve_default_path() -> str:
+    """Prefer the local desktop copy (when run on this machine); fall back to a copy
+    bundled alongside app.py (used when deployed, e.g. Streamlit Community Cloud)."""
+    if os.path.exists(_LOCAL_DEFAULT):
+        return _LOCAL_DEFAULT
+    if os.path.exists(_BUNDLED_DEFAULT):
+        return _BUNDLED_DEFAULT
+    return _LOCAL_DEFAULT
+
+
+DEFAULT_PATH = _resolve_default_path()
 
 st.set_page_config(page_title="Fast Track Dashboard", layout="wide")
+
+CUSTOM_CSS = """
+<style>
+    html, body, [class*="css"] {
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+    .app-title {
+        font-size: 2.1rem;
+        font-weight: 600;
+        color: #1F3A5F;
+        margin-bottom: 0.1rem;
+    }
+    .app-subtitle {
+        font-size: 1rem;
+        color: #5A6472;
+        margin-bottom: 1.5rem;
+    }
+    .section-title {
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: #1F3A5F;
+        margin-bottom: 1rem;
+        border-bottom: 2px solid #E3E7EC;
+        padding-bottom: 0.4rem;
+    }
+    .kpi-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 1px solid #E3E7EC;
+        border-radius: 8px;
+        padding: 1.1rem 1.6rem;
+        margin-bottom: 0.9rem;
+        background-color: #FAFBFC;
+    }
+    .kpi-label {
+        font-size: 1.15rem;
+        font-weight: 500;
+        color: #2B333D;
+    }
+    .kpi-value {
+        font-size: 2.1rem;
+        font-weight: 700;
+        color: #1F3A5F;
+    }
+    .kpi-value.positive { color: #1B6E3C; }
+    .kpi-value.negative { color: #A32424; }
+    .source-note {
+        font-size: 0.9rem;
+        color: #5A6472;
+        margin-bottom: 1rem;
+    }
+    div[data-testid="stTabs"] button p {
+        font-size: 1.05rem;
+        font-weight: 500;
+    }
+</style>
+"""
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
 @st.cache_data(show_spinner="Loading workbook...")
@@ -21,10 +98,11 @@ def _load(path: str, mtime: float):
 
 def get_workbook():
     path = st.session_state.get("wb_path", DEFAULT_PATH)
-    import os
 
     if not os.path.exists(path):
-        st.error(f"File not found: {path}")
+        st.info(
+            "No workbook is loaded yet. Upload an .xlsx file using the sidebar to get started."
+        )
         st.stop()
     mtime = os.path.getmtime(path)
     try:
@@ -46,36 +124,66 @@ def get_workbook():
 
 with st.sidebar:
     st.header("Data Source")
-    path_input = st.text_input("Workbook path", value=DEFAULT_PATH)
-    st.session_state["wb_path"] = path_input
-    uploaded = st.file_uploader("...or upload an .xlsx file", type=["xlsx"])
+    st.caption("Loads the file below by default. Upload your own workbook to replace it.")
+
+    if "wb_path" not in st.session_state:
+        st.session_state["wb_path"] = DEFAULT_PATH
+
+    uploaded = st.file_uploader("Upload a workbook (.xlsx)", type=["xlsx"])
     if uploaded is not None:
         tmp_path = f"_uploaded_{uploaded.name}"
         with open(tmp_path, "wb") as f:
             f.write(uploaded.getbuffer())
         st.session_state["wb_path"] = tmp_path
 
+    if st.session_state["wb_path"] != DEFAULT_PATH:
+        if st.button("Reset to default file"):
+            st.session_state["wb_path"] = DEFAULT_PATH
+            st.rerun()
+
+    st.markdown("---")
+    st.caption(f"Active file:\n`{os.path.basename(st.session_state['wb_path'])}`")
+
 wb = get_workbook()
 
+st.markdown('<div class="app-title">Fast Track Financial Dashboard</div>', unsafe_allow_html=True)
+st.markdown(
+    f'<div class="app-subtitle">Source: {os.path.basename(st.session_state["wb_path"])}</div>',
+    unsafe_allow_html=True,
+)
+
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["📊 KPI Overview", "📈 Trends", "🧾 Income Statement", "🏦 Balance Sheet", "🔎 Market Research"]
+    ["KPI Overview", "Trends", "Income Statement", "Balance Sheet", "Market Research"]
 )
 
 # ---------------------------------------------------------------------------
 # Tab 1: KPI Overview
 # ---------------------------------------------------------------------------
 with tab1:
-    st.subheader("Key Performance Indicators")
+    st.markdown('<div class="section-title">Key Performance Indicators</div>', unsafe_allow_html=True)
     results = kpis.all_kpis(wb)
-    cols = st.columns(5)
-    for col, kpi in zip(cols, results):
-        col.metric(kpi.label, kpi.display)
+    for kpi in results:
+        css_class = "kpi-value"
+        if kpi.value is not None:
+            css_class += " positive" if kpi.value >= 0 else " negative"
+        st.markdown(
+            f"""
+            <div class="kpi-row">
+                <span class="kpi-label">{kpi.label}</span>
+                <span class="{css_class}">{kpi.display}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 # ---------------------------------------------------------------------------
 # Tab 2: Trend chart
 # ---------------------------------------------------------------------------
 with tab2:
-    st.subheader("Revenue, COGS & Net Income — Last 6 Months")
+    st.markdown(
+        '<div class="section-title">Revenue, COGS &amp; Net Income — Last 6 Months</div>',
+        unsafe_allow_html=True,
+    )
     is_table = wb.income_statement
     cogs_label = next(l for l in is_table.rows if l.startswith("COGS"))
     ni_label = next(l for l in is_table.rows if "Net Income" in l and "Scrubbed" in l)
@@ -87,17 +195,31 @@ with tab2:
     net_income = is_table.series(ni_label)[-n:]
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=months, y=revenue, mode="lines+markers", name="Revenue"))
-    fig.add_trace(go.Scatter(x=months, y=cogs, mode="lines+markers", name="COGS"))
-    fig.add_trace(go.Scatter(x=months, y=net_income, mode="lines+markers", name="Net Income"))
-    fig.update_layout(xaxis_title="Month", yaxis_title="€", hovermode="x unified")
+    fig.add_trace(go.Scatter(x=months, y=revenue, mode="lines+markers", name="Revenue",
+                              line=dict(color="#1F3A5F", width=3)))
+    fig.add_trace(go.Scatter(x=months, y=cogs, mode="lines+markers", name="COGS",
+                              line=dict(color="#A32424", width=3)))
+    fig.add_trace(go.Scatter(x=months, y=net_income, mode="lines+markers", name="Net Income",
+                              line=dict(color="#1B6E3C", width=3)))
+    fig.update_layout(
+        xaxis_title="Month",
+        yaxis_title="EUR",
+        hovermode="x unified",
+        plot_bgcolor="#FFFFFF",
+        paper_bgcolor="#FFFFFF",
+        font=dict(family="Segoe UI, Helvetica Neue, Arial, sans-serif", size=14),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 # ---------------------------------------------------------------------------
 # Tab 3: Income Statement
 # ---------------------------------------------------------------------------
 with tab3:
-    st.subheader("Income Statement — Current Month + Trailing 3")
+    st.markdown(
+        '<div class="section-title">Income Statement — Current Month + Trailing 3</div>',
+        unsafe_allow_html=True,
+    )
     is_table = wb.income_statement
     months = is_table.months[-4:] if len(is_table.months) >= 4 else is_table.months
     n = len(months)
@@ -109,7 +231,7 @@ with tab3:
 # Tab 4: Balance Sheet
 # ---------------------------------------------------------------------------
 with tab4:
-    st.subheader("Balance Sheet — Current Period")
+    st.markdown('<div class="section-title">Balance Sheet — Current Period</div>', unsafe_allow_html=True)
     bs_table = wb.balance_sheet
     latest_month = bs_table.months[-1]
     data = {label: values[-1] for label, values in bs_table.rows.items()}
@@ -120,7 +242,7 @@ with tab4:
 # Tab 5: Market Research
 # ---------------------------------------------------------------------------
 with tab5:
-    st.subheader("Market Research")
+    st.markdown('<div class="section-title">Market Research</div>', unsafe_allow_html=True)
     st.write(
         "Select keywords to research current market conditions that could affect "
         "forecasted growth rates."
