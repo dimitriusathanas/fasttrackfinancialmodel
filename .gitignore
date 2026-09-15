@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.log
+_uploaded_*
+.venv/
+*_dump.txt
+sanity_check.txt
